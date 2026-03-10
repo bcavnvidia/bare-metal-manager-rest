@@ -30,6 +30,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/nvidia/bare-metal-manager-rest/api/pkg/api/handler/util/common"
 	"github.com/nvidia/bare-metal-manager-rest/api/pkg/api/model"
+	sc "github.com/nvidia/bare-metal-manager-rest/api/pkg/client/site"
 	"github.com/nvidia/bare-metal-manager-rest/common/pkg/otelecho"
 	cdb "github.com/nvidia/bare-metal-manager-rest/db/pkg/db"
 	"github.com/nvidia/bare-metal-manager-rest/db/pkg/db/ipam"
@@ -256,6 +257,16 @@ func TestAllocationConstraintHandler_Update(t *testing.T) {
 		mock.AnythingOfType("internal.StartWorkflowOptions"),
 		mock.AnythingOfType("func(internal.Context, *uuid.UUID, *uuid.UUID, *uuid.UUID) error"),
 		mock.AnythingOfType("*uuid.UUID"), mock.AnythingOfType("*uuid.UUID"), mock.AnythingOfType("*uuid.UUID")).Return(wrun2, fmt.Errorf("Failed to execute workflow"))
+
+	tsc := &tmocks.Client{}
+	tcfg, _ := cfg.GetTemporalConfig()
+	scp := sc.NewClientPool(tcfg)
+	scp.IDClientMap[site.ID.String()] = tsc
+
+	siteWorkflowRun := &tmocks.WorkflowRun{}
+	siteWorkflowRun.On("GetID").Return("test-site-workflow-id")
+	siteWorkflowRun.Mock.On("Get", mock.Anything, mock.Anything).Return(nil)
+	mockSiteWorkflowClient(tsc, siteWorkflowRun)
 
 	tests := []struct {
 		name                    string
@@ -524,6 +535,7 @@ func TestAllocationConstraintHandler_Update(t *testing.T) {
 			tah := UpdateAllocationConstraintHandler{
 				dbSession: dbSession,
 				tc:        tc.tmc,
+				scp:       scp,
 				cfg:       cfg,
 			}
 

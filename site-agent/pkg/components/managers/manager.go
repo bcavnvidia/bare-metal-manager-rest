@@ -28,6 +28,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
 
+	"github.com/nvidia/bare-metal-manager-rest/site-agent/pkg/components/managers/allocation"
 	"github.com/nvidia/bare-metal-manager-rest/site-agent/pkg/components/managers/bootstrap"
 	"github.com/nvidia/bare-metal-manager-rest/site-agent/pkg/components/managers/carbide"
 	"github.com/nvidia/bare-metal-manager-rest/site-agent/pkg/components/managers/dpuextensionservice"
@@ -71,6 +72,7 @@ func NewAPIHandlers() {
 		SSHKeyGroup:            &sshkeygroup.API{},
 		InfiniBandPartition:    &infinibandpartition.API{},
 		Tenant:                 &tenant.API{},
+		Allocation:             &allocation.API{},
 		OperatingSystem:        &operatingsystem.API{},
 		MachineValidation:      &machinevalidation.API{},
 		InstanceType:           &instancetype.API{},
@@ -114,6 +116,7 @@ func (Managers *Manager) NewInstance() {
 	Managers.SSHKeyGroup()
 	Managers.InfiniBandPartition()
 	Managers.Tenant()
+	Managers.Allocation()
 	Managers.OperatingSystem()
 	Managers.MachineValidation()
 	Managers.InstanceType()
@@ -160,6 +163,7 @@ func (Managers *Manager) Init() {
 	Managers.SSHKeyGroup().Init()
 	Managers.InfiniBandPartition().Init()
 	Managers.Tenant().Init()
+	Managers.Allocation().Init()
 	Managers.OperatingSystem().Init()
 	Managers.MachineValidation().Init()
 	Managers.InstanceType().Init()

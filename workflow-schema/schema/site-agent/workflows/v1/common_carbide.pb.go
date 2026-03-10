@@ -929,6 +929,50 @@ func (x *NVLinkDomainId) GetValue() string {
 	return ""
 }
 
+type ComputeAllocationId struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComputeAllocationId) Reset() {
+	*x = ComputeAllocationId{}
+	mi := &file_common_carbide_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComputeAllocationId) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComputeAllocationId) ProtoMessage() {}
+
+func (x *ComputeAllocationId) ProtoReflect() protoreflect.Message {
+	mi := &file_common_carbide_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComputeAllocationId.ProtoReflect.Descriptor instead.
+func (*ComputeAllocationId) Descriptor() ([]byte, []int) {
+	return file_common_carbide_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ComputeAllocationId) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
 var File_common_carbide_proto protoreflect.FileDescriptor
 
 const file_common_carbide_proto_rawDesc = "" +
@@ -978,6 +1022,8 @@ const file_common_carbide_proto_rawDesc = "" +
 	"\x18NVLinkLogicalPartitionId\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\"&\n" +
 	"\x0eNVLinkDomainId\x12\x14\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value\"+\n" +
+	"\x13ComputeAllocationId\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05valueBAZ?github.com/nvidia/bare-metal-manager-rest/workflow-schema/protob\x06proto3"
 
 var (
@@ -992,7 +1038,7 @@ func file_common_carbide_proto_rawDescGZIP() []byte {
 	return file_common_carbide_proto_rawDescData
 }
 
-var file_common_carbide_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_common_carbide_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_common_carbide_proto_goTypes = []any{
 	(*MachineId)(nil),                // 0: common.MachineId
 	(*MachineIdList)(nil),            // 1: common.MachineIdList
@@ -1014,6 +1060,7 @@ var file_common_carbide_proto_goTypes = []any{
 	(*NVLinkPartitionId)(nil),        // 17: common.NVLinkPartitionId
 	(*NVLinkLogicalPartitionId)(nil), // 18: common.NVLinkLogicalPartitionId
 	(*NVLinkDomainId)(nil),           // 19: common.NVLinkDomainId
+	(*ComputeAllocationId)(nil),      // 20: common.ComputeAllocationId
 }
 var file_common_carbide_proto_depIdxs = []int32{
 	0, // 0: common.MachineIdList.machine_ids:type_name -> common.MachineId
@@ -1035,7 +1082,7 @@ func file_common_carbide_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_carbide_proto_rawDesc), len(file_common_carbide_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   20,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -39,6 +39,7 @@ import (
 	"github.com/nvidia/bare-metal-manager-rest/api/internal/config"
 	"github.com/nvidia/bare-metal-manager-rest/api/pkg/api/handler/util/common"
 	"github.com/nvidia/bare-metal-manager-rest/api/pkg/api/model"
+	sc "github.com/nvidia/bare-metal-manager-rest/api/pkg/client/site"
 	auth "github.com/nvidia/bare-metal-manager-rest/auth/pkg/authorization"
 	cerr "github.com/nvidia/bare-metal-manager-rest/common/pkg/util"
 	sutil "github.com/nvidia/bare-metal-manager-rest/common/pkg/util"
@@ -50,15 +51,17 @@ import (
 type UpdateAllocationConstraintHandler struct {
 	dbSession  *cdb.Session
 	tc         temporalClient.Client
+	scp        *sc.ClientPool
 	cfg        *config.Config
 	tracerSpan *sutil.TracerSpan
 }
 
 // NewUpdateAllocationConstraintHandler initializes and returns a new handler for updating Allocation Constraint
-func NewUpdateAllocationConstraintHandler(dbSession *cdb.Session, tc temporalClient.Client, cfg *config.Config) UpdateAllocationConstraintHandler {
+func NewUpdateAllocationConstraintHandler(dbSession *cdb.Session, tc temporalClient.Client, scp *sc.ClientPool, cfg *config.Config) UpdateAllocationConstraintHandler {
 	return UpdateAllocationConstraintHandler{
 		dbSession:  dbSession,
 		tc:         tc,
+		scp:        scp,
 		cfg:        cfg,
 		tracerSpan: sutil.NewTracerSpan(),
 	}
@@ -373,6 +376,21 @@ func (uach UpdateAllocationConstraintHandler) Handle(c echo.Context) error {
 		if err != nil {
 			logger.Error().Err(err).Msg("error updating AllocationConstraint in DB")
 			return cerr.NewAPIErrorResponse(c, http.StatusInternalServerError, "Failed to update AllocationConstraint", nil)
+		}
+
+		if ac.ResourceType == cdbm.AllocationResourceTypeInstanceType {
+			if err = executeComputeAllocationWorkflow(
+				ctx,
+				c,
+				logger,
+				uach.scp,
+				a.SiteID,
+				"compute-allocation-update-"+a.ID.String(),
+				"UpdateComputeAllocation",
+				buildUpdateComputeAllocationRequest(a.ID, a.Tenant.Org, a.Name, a.Description, updatedac.ResourceTypeID, updatedac.ConstraintValue, dbUser.ID),
+			); err != nil {
+				return err
+			}
 		}
 
 		err = tx.Commit()

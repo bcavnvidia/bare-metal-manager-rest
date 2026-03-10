@@ -18,6 +18,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -26,9 +27,11 @@ import (
 	"strconv"
 
 	temporalClient "go.temporal.io/sdk/client"
+	tp "go.temporal.io/sdk/temporal"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
 	"github.com/labstack/echo/v4"
@@ -46,7 +49,9 @@ import (
 	"github.com/nvidia/bare-metal-manager-rest/api/pkg/api/pagination"
 	sc "github.com/nvidia/bare-metal-manager-rest/api/pkg/client/site"
 	auth "github.com/nvidia/bare-metal-manager-rest/auth/pkg/authorization"
+	cwutil "github.com/nvidia/bare-metal-manager-rest/common/pkg/util"
 	sutil "github.com/nvidia/bare-metal-manager-rest/common/pkg/util"
+	swe "github.com/nvidia/bare-metal-manager-rest/site-workflow/pkg/error"
 	cwssaws "github.com/nvidia/bare-metal-manager-rest/workflow-schema/schema/site-agent/workflows/v1"
 
 	cerr "github.com/nvidia/bare-metal-manager-rest/common/pkg/util"
@@ -73,6 +78,91 @@ func NewCreateAllocationHandler(dbSession *cdb.Session, tc temporalClient.Client
 		cfg:        cfg,
 		tracerSpan: sutil.NewTracerSpan(),
 	}
+}
+
+func buildComputeAllocationMetadata(name string, description *string) *cwssaws.Metadata {
+	metadata := &cwssaws.Metadata{Name: name}
+	if description != nil {
+		metadata.Description = *description
+	}
+	return metadata
+}
+
+func buildCreateComputeAllocationRequest(allocationID uuid.UUID, tenantOrg, name string, description *string, instanceTypeID uuid.UUID, count int, createdBy uuid.UUID) *cwssaws.CreateComputeAllocationRequest {
+	return &cwssaws.CreateComputeAllocationRequest{
+		Id:                   &cwssaws.ComputeAllocationId{Value: allocationID.String()},
+		TenantOrganizationId: tenantOrg,
+		Metadata:             buildComputeAllocationMetadata(name, description),
+		Attributes: &cwssaws.ComputeAllocationAttributes{
+			InstanceTypeId: instanceTypeID.String(),
+			Count:          uint32(count),
+		},
+		CreatedBy: cdb.GetStrPtr(createdBy.String()),
+	}
+}
+
+func buildUpdateComputeAllocationRequest(allocationID uuid.UUID, tenantOrg, name string, description *string, instanceTypeID uuid.UUID, count int, updatedBy uuid.UUID) *cwssaws.UpdateComputeAllocationRequest {
+	return &cwssaws.UpdateComputeAllocationRequest{
+		Id:                   &cwssaws.ComputeAllocationId{Value: allocationID.String()},
+		TenantOrganizationId: tenantOrg,
+		Metadata:             buildComputeAllocationMetadata(name, description),
+		Attributes: &cwssaws.ComputeAllocationAttributes{
+			InstanceTypeId: instanceTypeID.String(),
+			Count:          uint32(count),
+		},
+		UpdatedBy: cdb.GetStrPtr(updatedBy.String()),
+	}
+}
+
+func buildDeleteComputeAllocationRequest(allocationID uuid.UUID, tenantOrg string) *cwssaws.DeleteComputeAllocationRequest {
+	return &cwssaws.DeleteComputeAllocationRequest{
+		Id:                   &cwssaws.ComputeAllocationId{Value: allocationID.String()},
+		TenantOrganizationId: tenantOrg,
+	}
+}
+
+func executeComputeAllocationWorkflow(ctx context.Context, c echo.Context, logger zerolog.Logger, scp *sc.ClientPool, siteID uuid.UUID, workflowID, workflowName string, request interface{}) error {
+	stc, err := scp.GetClientByID(siteID)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to retrieve Temporal client for Site")
+		return cerr.NewAPIErrorResponse(c, http.StatusInternalServerError, "Failed to retrieve client for Site", nil)
+	}
+
+	workflowOptions := temporalClient.StartWorkflowOptions{
+		ID:                       workflowID,
+		TaskQueue:                queue.SiteTaskQueue,
+		WorkflowExecutionTimeout: cwutil.WorkflowExecutionTimeout,
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, cwutil.WorkflowContextTimeout)
+	defer cancel()
+
+	we, err := stc.ExecuteWorkflow(ctx, workflowOptions, workflowName, request)
+	if err != nil {
+		logger.Error().Err(err).Str("Workflow", workflowName).Msg("failed to synchronously start Temporal workflow")
+		return cerr.NewAPIErrorResponse(c, http.StatusInternalServerError, fmt.Sprintf("Failed to start sync workflow %s: %s", workflowName, err), nil)
+	}
+
+	wid := we.GetID()
+	err = we.Get(ctx, nil)
+	if err != nil {
+		var applicationErr *tp.ApplicationError
+		if errors.As(err, &applicationErr) && (applicationErr.Type() == swe.ErrTypeCarbideUnimplemented || applicationErr.Type() == swe.ErrTypeCarbideDenied) {
+			logger.Warn().Str("Workflow", workflowName).Msg("Carbide endpoint unimplemented or restricted response received from Site")
+			return nil
+		}
+
+		var timeoutErr *tp.TimeoutError
+		if errors.As(err, &timeoutErr) || err == context.DeadlineExceeded || ctx.Err() != nil {
+			return common.TerminateWorkflowOnTimeOut(c, logger, stc, wid, err, "Allocation", workflowName)
+		}
+
+		code, wfErr := common.UnwrapWorkflowError(err)
+		logger.Error().Err(wfErr).Str("Workflow", workflowName).Msg("failed to synchronously execute Temporal workflow")
+		return cerr.NewAPIErrorResponse(c, code, fmt.Sprintf("Failed to execute sync workflow %s: %s", workflowName, wfErr), nil)
+	}
+
+	return nil
 }
 
 // Handle godoc
@@ -476,6 +566,21 @@ func (cah CreateAllocationHandler) Handle(c echo.Context) error {
 			logger.Error().Err(err).Str("Tenant ID", tenant.ID.String()).Msg("failed to trigger workflow to create Tenant")
 		} else {
 			logger.Info().Str("Workflow ID", we.GetID()).Msg("triggered workflow to create Tenant")
+		}
+	}
+
+	if len(dbacsRet) == 1 && dbacsRet[0].ResourceType == cdbm.AllocationResourceTypeInstanceType {
+		if err = executeComputeAllocationWorkflow(
+			ctx,
+			c,
+			logger,
+			cah.scp,
+			site.ID,
+			"compute-allocation-create-"+a.ID.String(),
+			"CreateComputeAllocation",
+			buildCreateComputeAllocationRequest(a.ID, tenant.Org, a.Name, a.Description, dbacsRet[0].ResourceTypeID, dbacsRet[0].ConstraintValue, dbUser.ID),
+		); err != nil {
+			return err
 		}
 	}
 
@@ -1097,15 +1202,17 @@ func (gah GetAllocationHandler) Handle(c echo.Context) error {
 type UpdateAllocationHandler struct {
 	dbSession  *cdb.Session
 	tc         temporalClient.Client
+	scp        *sc.ClientPool
 	cfg        *config.Config
 	tracerSpan *sutil.TracerSpan
 }
 
 // NewUpdateAllocationHandler initializes and returns a new handler for updating Allocation
-func NewUpdateAllocationHandler(dbSession *cdb.Session, tc temporalClient.Client, cfg *config.Config) UpdateAllocationHandler {
+func NewUpdateAllocationHandler(dbSession *cdb.Session, tc temporalClient.Client, scp *sc.ClientPool, cfg *config.Config) UpdateAllocationHandler {
 	return UpdateAllocationHandler{
 		dbSession:  dbSession,
 		tc:         tc,
+		scp:        scp,
 		cfg:        cfg,
 		tracerSpan: sutil.NewTracerSpan(),
 	}
@@ -1229,6 +1336,8 @@ func (uah UpdateAllocationHandler) Handle(c echo.Context) error {
 			"InfrastructureProvider in org does not match InfrastructureProvider in Allocation", nil)
 	}
 
+	tenantOrg := a.Tenant.Org
+
 	// Check for name uniqueness for the tenant, ie, tenant cannot have another allocation with same name at the site
 	if apiRequest.Name != nil && *apiRequest.Name != a.Name {
 		filter := cdbm.AllocationFilterInput{
@@ -1297,6 +1406,21 @@ func (uah UpdateAllocationHandler) Handle(c echo.Context) error {
 		return cerr.NewAPIErrorResponse(c, http.StatusInternalServerError, "Failed to retrieve Allocation Constraints for Allocation", nil)
 	}
 
+	if len(acs) == 1 && acs[0].ResourceType == cdbm.AllocationResourceTypeInstanceType {
+		if err = executeComputeAllocationWorkflow(
+			ctx,
+			c,
+			logger,
+			uah.scp,
+			a.SiteID,
+			"compute-allocation-update-"+a.ID.String(),
+			"UpdateComputeAllocation",
+			buildUpdateComputeAllocationRequest(a.ID, tenantOrg, a.Name, a.Description, acs[0].ResourceTypeID, acs[0].ConstraintValue, dbUser.ID),
+		); err != nil {
+			return err
+		}
+	}
+
 	if err = tx.Commit(); err != nil {
 		logger.Error().Err(err).Msg("error updating Allocation in DB")
 		return cerr.NewAPIErrorResponse(c, http.StatusInternalServerError, "Failed to update Allocation", nil)
@@ -1321,15 +1445,17 @@ func (uah UpdateAllocationHandler) Handle(c echo.Context) error {
 type DeleteAllocationHandler struct {
 	dbSession  *cdb.Session
 	tc         temporalClient.Client
+	scp        *sc.ClientPool
 	cfg        *config.Config
 	tracerSpan *sutil.TracerSpan
 }
 
 // NewDeleteAllocationHandler initializes and returns a new handler for deleting Allocation
-func NewDeleteAllocationHandler(dbSession *cdb.Session, tc temporalClient.Client, cfg *config.Config) DeleteAllocationHandler {
+func NewDeleteAllocationHandler(dbSession *cdb.Session, tc temporalClient.Client, scp *sc.ClientPool, cfg *config.Config) DeleteAllocationHandler {
 	return DeleteAllocationHandler{
 		dbSession:  dbSession,
 		tc:         tc,
+		scp:        scp,
 		cfg:        cfg,
 		tracerSpan: sutil.NewTracerSpan(),
 	}
@@ -1591,6 +1717,21 @@ func (dah DeleteAllocationHandler) Handle(c echo.Context) error {
 		if err != nil {
 			logger.Error().Err(err).Msg("error deleting Allocation Constraint in Allocation")
 			return cerr.NewAPIErrorResponse(c, http.StatusInternalServerError, "Error deleting Allocation Constraint for Allocation", nil)
+		}
+	}
+
+	if len(imAcDel) == 1 {
+		if err = executeComputeAllocationWorkflow(
+			ctx,
+			c,
+			logger,
+			dah.scp,
+			a.SiteID,
+			"compute-allocation-delete-"+a.ID.String(),
+			"DeleteComputeAllocation",
+			buildDeleteComputeAllocationRequest(a.ID, a.Tenant.Org),
+		); err != nil {
+			return err
 		}
 	}
 

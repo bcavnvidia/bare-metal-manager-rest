@@ -338,6 +338,11 @@ const (
 	Forge_UpdateNVLinkLogicalPartition_FullMethodName             = "/forge.Forge/UpdateNVLinkLogicalPartition"
 	Forge_DeleteNVLinkLogicalPartition_FullMethodName             = "/forge.Forge/DeleteNVLinkLogicalPartition"
 	Forge_NVLinkLogicalPartitionsForTenant_FullMethodName         = "/forge.Forge/NVLinkLogicalPartitionsForTenant"
+	Forge_CreateComputeAllocation_FullMethodName                  = "/forge.Forge/CreateComputeAllocation"
+	Forge_FindComputeAllocationIds_FullMethodName                 = "/forge.Forge/FindComputeAllocationIds"
+	Forge_FindComputeAllocationsByIds_FullMethodName              = "/forge.Forge/FindComputeAllocationsByIds"
+	Forge_UpdateComputeAllocation_FullMethodName                  = "/forge.Forge/UpdateComputeAllocation"
+	Forge_DeleteComputeAllocation_FullMethodName                  = "/forge.Forge/DeleteComputeAllocation"
 )
 
 // ForgeClient is the client API for Forge service.
@@ -808,6 +813,12 @@ type ForgeClient interface {
 	DeleteNVLinkLogicalPartition(ctx context.Context, in *NVLinkLogicalPartitionDeletionRequest, opts ...grpc.CallOption) (*NVLinkLogicalPartitionDeletionResult, error)
 	// Find all Logical partitions under a specified tenant
 	NVLinkLogicalPartitionsForTenant(ctx context.Context, in *TenantSearchQuery, opts ...grpc.CallOption) (*NVLinkLogicalPartitionList, error)
+	// Compute Allocations
+	CreateComputeAllocation(ctx context.Context, in *CreateComputeAllocationRequest, opts ...grpc.CallOption) (*CreateComputeAllocationResponse, error)
+	FindComputeAllocationIds(ctx context.Context, in *FindComputeAllocationIdsRequest, opts ...grpc.CallOption) (*FindComputeAllocationIdsResponse, error)
+	FindComputeAllocationsByIds(ctx context.Context, in *FindComputeAllocationsByIdsRequest, opts ...grpc.CallOption) (*FindComputeAllocationsByIdsResponse, error)
+	UpdateComputeAllocation(ctx context.Context, in *UpdateComputeAllocationRequest, opts ...grpc.CallOption) (*UpdateComputeAllocationResponse, error)
+	DeleteComputeAllocation(ctx context.Context, in *DeleteComputeAllocationRequest, opts ...grpc.CallOption) (*DeleteComputeAllocationResponse, error)
 }
 
 type forgeClient struct {
@@ -3545,6 +3556,51 @@ func (c *forgeClient) NVLinkLogicalPartitionsForTenant(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *forgeClient) CreateComputeAllocation(ctx context.Context, in *CreateComputeAllocationRequest, opts ...grpc.CallOption) (*CreateComputeAllocationResponse, error) {
+	out := new(CreateComputeAllocationResponse)
+	err := c.cc.Invoke(ctx, Forge_CreateComputeAllocation_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *forgeClient) FindComputeAllocationIds(ctx context.Context, in *FindComputeAllocationIdsRequest, opts ...grpc.CallOption) (*FindComputeAllocationIdsResponse, error) {
+	out := new(FindComputeAllocationIdsResponse)
+	err := c.cc.Invoke(ctx, Forge_FindComputeAllocationIds_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *forgeClient) FindComputeAllocationsByIds(ctx context.Context, in *FindComputeAllocationsByIdsRequest, opts ...grpc.CallOption) (*FindComputeAllocationsByIdsResponse, error) {
+	out := new(FindComputeAllocationsByIdsResponse)
+	err := c.cc.Invoke(ctx, Forge_FindComputeAllocationsByIds_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *forgeClient) UpdateComputeAllocation(ctx context.Context, in *UpdateComputeAllocationRequest, opts ...grpc.CallOption) (*UpdateComputeAllocationResponse, error) {
+	out := new(UpdateComputeAllocationResponse)
+	err := c.cc.Invoke(ctx, Forge_UpdateComputeAllocation_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *forgeClient) DeleteComputeAllocation(ctx context.Context, in *DeleteComputeAllocationRequest, opts ...grpc.CallOption) (*DeleteComputeAllocationResponse, error) {
+	out := new(DeleteComputeAllocationResponse)
+	err := c.cc.Invoke(ctx, Forge_DeleteComputeAllocation_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ForgeServer is the server API for Forge service.
 // All implementations should embed UnimplementedForgeServer
 // for forward compatibility
@@ -4013,6 +4069,12 @@ type ForgeServer interface {
 	DeleteNVLinkLogicalPartition(context.Context, *NVLinkLogicalPartitionDeletionRequest) (*NVLinkLogicalPartitionDeletionResult, error)
 	// Find all Logical partitions under a specified tenant
 	NVLinkLogicalPartitionsForTenant(context.Context, *TenantSearchQuery) (*NVLinkLogicalPartitionList, error)
+	// Compute Allocations
+	CreateComputeAllocation(context.Context, *CreateComputeAllocationRequest) (*CreateComputeAllocationResponse, error)
+	FindComputeAllocationIds(context.Context, *FindComputeAllocationIdsRequest) (*FindComputeAllocationIdsResponse, error)
+	FindComputeAllocationsByIds(context.Context, *FindComputeAllocationsByIdsRequest) (*FindComputeAllocationsByIdsResponse, error)
+	UpdateComputeAllocation(context.Context, *UpdateComputeAllocationRequest) (*UpdateComputeAllocationResponse, error)
+	DeleteComputeAllocation(context.Context, *DeleteComputeAllocationRequest) (*DeleteComputeAllocationResponse, error)
 }
 
 // UnimplementedForgeServer should be embedded to have forward compatible implementations.
@@ -4927,6 +4989,21 @@ func (UnimplementedForgeServer) DeleteNVLinkLogicalPartition(context.Context, *N
 }
 func (UnimplementedForgeServer) NVLinkLogicalPartitionsForTenant(context.Context, *TenantSearchQuery) (*NVLinkLogicalPartitionList, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method NVLinkLogicalPartitionsForTenant not implemented")
+}
+func (UnimplementedForgeServer) CreateComputeAllocation(context.Context, *CreateComputeAllocationRequest) (*CreateComputeAllocationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateComputeAllocation not implemented")
+}
+func (UnimplementedForgeServer) FindComputeAllocationIds(context.Context, *FindComputeAllocationIdsRequest) (*FindComputeAllocationIdsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FindComputeAllocationIds not implemented")
+}
+func (UnimplementedForgeServer) FindComputeAllocationsByIds(context.Context, *FindComputeAllocationsByIdsRequest) (*FindComputeAllocationsByIdsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FindComputeAllocationsByIds not implemented")
+}
+func (UnimplementedForgeServer) UpdateComputeAllocation(context.Context, *UpdateComputeAllocationRequest) (*UpdateComputeAllocationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateComputeAllocation not implemented")
+}
+func (UnimplementedForgeServer) DeleteComputeAllocation(context.Context, *DeleteComputeAllocationRequest) (*DeleteComputeAllocationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteComputeAllocation not implemented")
 }
 
 // UnsafeForgeServer may be embedded to opt out of forward compatibility for this service.
@@ -10394,6 +10471,96 @@ func _Forge_NVLinkLogicalPartitionsForTenant_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Forge_CreateComputeAllocation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateComputeAllocationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ForgeServer).CreateComputeAllocation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Forge_CreateComputeAllocation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ForgeServer).CreateComputeAllocation(ctx, req.(*CreateComputeAllocationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Forge_FindComputeAllocationIds_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FindComputeAllocationIdsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ForgeServer).FindComputeAllocationIds(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Forge_FindComputeAllocationIds_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ForgeServer).FindComputeAllocationIds(ctx, req.(*FindComputeAllocationIdsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Forge_FindComputeAllocationsByIds_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FindComputeAllocationsByIdsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ForgeServer).FindComputeAllocationsByIds(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Forge_FindComputeAllocationsByIds_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ForgeServer).FindComputeAllocationsByIds(ctx, req.(*FindComputeAllocationsByIdsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Forge_UpdateComputeAllocation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateComputeAllocationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ForgeServer).UpdateComputeAllocation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Forge_UpdateComputeAllocation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ForgeServer).UpdateComputeAllocation(ctx, req.(*UpdateComputeAllocationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Forge_DeleteComputeAllocation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteComputeAllocationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ForgeServer).DeleteComputeAllocation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Forge_DeleteComputeAllocation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ForgeServer).DeleteComputeAllocation(ctx, req.(*DeleteComputeAllocationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Forge_ServiceDesc is the grpc.ServiceDesc for Forge service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -11612,6 +11779,26 @@ var Forge_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "NVLinkLogicalPartitionsForTenant",
 			Handler:    _Forge_NVLinkLogicalPartitionsForTenant_Handler,
+		},
+		{
+			MethodName: "CreateComputeAllocation",
+			Handler:    _Forge_CreateComputeAllocation_Handler,
+		},
+		{
+			MethodName: "FindComputeAllocationIds",
+			Handler:    _Forge_FindComputeAllocationIds_Handler,
+		},
+		{
+			MethodName: "FindComputeAllocationsByIds",
+			Handler:    _Forge_FindComputeAllocationsByIds_Handler,
+		},
+		{
+			MethodName: "UpdateComputeAllocation",
+			Handler:    _Forge_UpdateComputeAllocation_Handler,
+		},
+		{
+			MethodName: "DeleteComputeAllocation",
+			Handler:    _Forge_DeleteComputeAllocation_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

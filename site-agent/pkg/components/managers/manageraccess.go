@@ -18,6 +18,7 @@
 package managers
 
 import (
+	"github.com/nvidia/bare-metal-manager-rest/site-agent/pkg/components/managers/allocation"
 	"github.com/nvidia/bare-metal-manager-rest/site-agent/pkg/components/managers/bootstrap"
 	"github.com/nvidia/bare-metal-manager-rest/site-agent/pkg/components/managers/carbide"
 	"github.com/nvidia/bare-metal-manager-rest/site-agent/pkg/components/managers/dpuextensionservice"
@@ -114,6 +115,11 @@ func (m *Manager) InfiniBandPartition() *infinibandpartition.API {
 // Tenant - Add Tenant Manager instance here
 func (m *Manager) Tenant() *tenant.API {
 	return tenant.NewTenantManager(m.Data.EB, m.API, m.Conf)
+}
+
+// Allocation - Add Allocation Manager instance here
+func (m *Manager) Allocation() *allocation.API {
+	return allocation.NewAllocationManager(m.Data.EB, m.API, m.Conf)
 }
 
 // OperatingSystem - Add OperatingSystem Manager instance here

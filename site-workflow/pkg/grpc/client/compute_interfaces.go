@@ -29,6 +29,8 @@ type ComputeInterface interface {
 	MachineInterface
 	// Instance Interface
 	InstanceInterface
+	// Allocation Interface
+	AllocationInterface
 	// SSHKeyGroup Interface
 	SSHKeyGroupInterface
 	// OperatingSystem Interface

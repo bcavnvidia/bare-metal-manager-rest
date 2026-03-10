@@ -257,6 +257,9 @@ func workflowOrchestrator() error {
 	ManagerAccess.API.Tenant.RegisterSubscriber()
 	ManagerAccess.API.Tenant.RegisterPublisher()
 
+	ManagerAccess.API.Allocation.RegisterSubscriber()
+	ManagerAccess.API.Allocation.RegisterPublisher()
+
 	ManagerAccess.API.OperatingSystem.RegisterSubscriber()
 	ManagerAccess.API.OperatingSystem.RegisterPublisher()
 

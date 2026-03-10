@@ -80,6 +80,9 @@ import (
 	expectedMachineActivity "github.com/nvidia/bare-metal-manager-rest/workflow/pkg/activity/expectedmachine"
 	expectedMachineWorkflow "github.com/nvidia/bare-metal-manager-rest/workflow/pkg/workflow/expectedmachine"
 
+	allocationActivity "github.com/nvidia/bare-metal-manager-rest/workflow/pkg/activity/allocation"
+	allocationWorkflow "github.com/nvidia/bare-metal-manager-rest/workflow/pkg/workflow/allocation"
+
 	tenantActivity "github.com/nvidia/bare-metal-manager-rest/workflow/pkg/activity/tenant"
 	tenantWorkflow "github.com/nvidia/bare-metal-manager-rest/workflow/pkg/workflow/tenant"
 
@@ -302,6 +305,9 @@ func main() {
 		// Tenant workflow
 		w.RegisterWorkflow(tenantWorkflow.UpdateTenantInventory)
 
+		// ComputeAllocation workflow
+		w.RegisterWorkflow(allocationWorkflow.UpdateComputeAllocationInventory)
+
 		// InstanceType workflow
 		w.RegisterWorkflow(instanceTypeWorkflow.UpdateInstanceTypeInventory)
 
@@ -355,6 +361,9 @@ func main() {
 
 	tenantManager := tenantActivity.NewManageTenant(dbSession, siteClientPool)
 	w.RegisterActivity(&tenantManager)
+
+	allocationManager := allocationActivity.NewManageAllocation(dbSession, siteClientPool)
+	w.RegisterActivity(&allocationManager)
 
 	instanceTypeManager := instanceTypeActivity.NewManageInstanceType(dbSession, siteClientPool)
 	w.RegisterActivity(&instanceTypeManager)

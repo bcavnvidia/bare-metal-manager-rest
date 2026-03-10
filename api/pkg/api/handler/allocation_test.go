@@ -111,6 +111,17 @@ func testAllocationBuildVpc(t *testing.T, dbSession *cdb.Session, ip *cdbm.Infra
 	return vpc
 }
 
+func mockSiteWorkflowClient(tsc *tmocks.Client, wrun *tmocks.WorkflowRun) {
+	tsc.Mock.On("ExecuteWorkflow", mock.Anything, mock.AnythingOfType("internal.StartWorkflowOptions"),
+		"CreateTenant", mock.Anything).Return(wrun, nil)
+	tsc.Mock.On("ExecuteWorkflow", mock.Anything, mock.AnythingOfType("internal.StartWorkflowOptions"),
+		"CreateComputeAllocation", mock.Anything).Return(wrun, nil)
+	tsc.Mock.On("ExecuteWorkflow", mock.Anything, mock.AnythingOfType("internal.StartWorkflowOptions"),
+		"UpdateComputeAllocation", mock.Anything).Return(wrun, nil)
+	tsc.Mock.On("ExecuteWorkflow", mock.Anything, mock.AnythingOfType("internal.StartWorkflowOptions"),
+		"DeleteComputeAllocation", mock.Anything).Return(wrun, nil)
+}
+
 func TestAllocationHandler_Create(t *testing.T) {
 	ctx := context.Background()
 	dbSession := testMachineInitDB(t)
@@ -312,8 +323,7 @@ func TestAllocationHandler_Create(t *testing.T) {
 	wrun.On("GetID").Return(wid)
 
 	wrun.Mock.On("Get", mock.Anything, mock.Anything).Return(nil)
-	tsc.Mock.On("ExecuteWorkflow", mock.Anything, mock.AnythingOfType("internal.StartWorkflowOptions"),
-		"CreateTenant", mock.Anything).Return(wrun, nil)
+	mockSiteWorkflowClient(tsc, wrun)
 
 	tests := []struct {
 		name                 string
@@ -691,8 +701,7 @@ func testCreateAllocation(t *testing.T, dbSession *cdb.Session, ipamStorage cipa
 	wrun.On("GetID").Return(wid)
 
 	wrun.Mock.On("Get", mock.Anything, mock.Anything).Return(nil)
-	tsc.Mock.On("ExecuteWorkflow", mock.Anything, mock.AnythingOfType("internal.StartWorkflowOptions"),
-		"CreateTenant", mock.Anything).Return(wrun, nil)
+	mockSiteWorkflowClient(tsc, wrun)
 
 	cipbh := CreateAllocationHandler{
 		dbSession: dbSession,
@@ -2033,6 +2042,16 @@ func TestAllocationHandler_Update(t *testing.T) {
 		mock.AnythingOfType("func(internal.Context, *uuid.UUID, *uuid.UUID, *uuid.UUID) error"),
 		mock.AnythingOfType("*uuid.UUID"), mock.AnythingOfType("*uuid.UUID"), mock.AnythingOfType("*uuid.UUID")).Return(wrun2, fmt.Errorf("Failed to execute workflow"))
 
+	tsc := &tmocks.Client{}
+	tcfg, _ := cfg.GetTemporalConfig()
+	scp := sc.NewClientPool(tcfg)
+	scp.IDClientMap[site.ID.String()] = tsc
+
+	siteWorkflowRun := &tmocks.WorkflowRun{}
+	siteWorkflowRun.On("GetID").Return("test-site-workflow-id")
+	siteWorkflowRun.Mock.On("Get", mock.Anything, mock.Anything).Return(nil)
+	mockSiteWorkflowClient(tsc, siteWorkflowRun)
+
 	tests := []struct {
 		name                      string
 		reqOrgName                string
@@ -2208,6 +2227,7 @@ func TestAllocationHandler_Update(t *testing.T) {
 			tah := UpdateAllocationHandler{
 				dbSession: dbSession,
 				tc:        tc.tmc,
+				scp:       scp,
 				cfg:       cfg,
 			}
 			err := tah.Handle(ec)
@@ -2419,6 +2439,16 @@ func TestAllocationHandler_Delete(t *testing.T) {
 		mock.AnythingOfType("func(internal.Context, uuid.UUID) error"),
 		mock.AnythingOfType("uuid.UUID")).Return(wrun3, nil)
 
+	tsc := &tmocks.Client{}
+	tcfg, _ := cfg.GetTemporalConfig()
+	scp := sc.NewClientPool(tcfg)
+	scp.IDClientMap[site.ID.String()] = tsc
+
+	siteWorkflowRun := &tmocks.WorkflowRun{}
+	siteWorkflowRun.On("GetID").Return("test-site-workflow-id")
+	siteWorkflowRun.Mock.On("Get", mock.Anything, mock.Anything).Return(nil)
+	mockSiteWorkflowClient(tsc, siteWorkflowRun)
+
 	tests := []struct {
 		name               string
 		reqOrgName         string
@@ -2604,6 +2634,7 @@ func TestAllocationHandler_Delete(t *testing.T) {
 			dah := DeleteAllocationHandler{
 				dbSession: dbSession,
 				tc:        tc.tmc,
+				scp:       scp,
 				cfg:       cfg,
 			}
 			err := dah.Handle(ec)
@@ -2735,8 +2766,7 @@ func TestInstanceTypeAllocationForMultipleTenants(t *testing.T) {
 	wrun.On("GetID").Return(wid)
 
 	wrun.Mock.On("Get", mock.Anything, mock.Anything).Return(nil)
-	tsc.Mock.On("ExecuteWorkflow", mock.Anything, mock.AnythingOfType("internal.StartWorkflowOptions"),
-		"CreateTenant", mock.Anything).Return(wrun, nil)
+	mockSiteWorkflowClient(tsc, wrun)
 
 	// OTEL Spanner configuration
 	tracer, _, ctx := common.TestCommonTraceProviderSetup(t, ctx)
