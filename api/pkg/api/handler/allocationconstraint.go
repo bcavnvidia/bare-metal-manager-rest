@@ -39,7 +39,9 @@ import (
 	"github.com/NVIDIA/ncx-infra-controller-rest/api/internal/config"
 	"github.com/NVIDIA/ncx-infra-controller-rest/api/pkg/api/handler/util/common"
 	"github.com/NVIDIA/ncx-infra-controller-rest/api/pkg/api/model"
+	sc "github.com/NVIDIA/ncx-infra-controller-rest/api/pkg/client/site"
 	auth "github.com/NVIDIA/ncx-infra-controller-rest/auth/pkg/authorization"
+	cwssaws "github.com/NVIDIA/ncx-infra-controller-rest/workflow-schema/schema/site-agent/workflows/v1"
 )
 
 // ~~~~~ Update Handler ~~~~~ //
@@ -48,15 +50,17 @@ import (
 type UpdateAllocationConstraintHandler struct {
 	dbSession  *cdb.Session
 	tc         temporalClient.Client
+	scp        *sc.ClientPool
 	cfg        *config.Config
 	tracerSpan *cutil.TracerSpan
 }
 
 // NewUpdateAllocationConstraintHandler initializes and returns a new handler for updating Allocation Constraint
-func NewUpdateAllocationConstraintHandler(dbSession *cdb.Session, tc temporalClient.Client, cfg *config.Config) UpdateAllocationConstraintHandler {
+func NewUpdateAllocationConstraintHandler(dbSession *cdb.Session, tc temporalClient.Client, scp *sc.ClientPool, cfg *config.Config) UpdateAllocationConstraintHandler {
 	return UpdateAllocationConstraintHandler{
 		dbSession:  dbSession,
 		tc:         tc,
+		scp:        scp,
 		cfg:        cfg,
 		tracerSpan: cutil.NewTracerSpan(),
 	}
@@ -422,6 +426,61 @@ func (uach UpdateAllocationConstraintHandler) Handle(c echo.Context) error {
 		if err != nil {
 			logger.Error().Err(err).Msg("error updating AllocationConstraint in DB")
 			return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, "Failed to update AllocationConstraint", nil)
+		}
+
+		if ac.ResourceType == cdbm.AllocationResourceTypeInstanceType {
+			if uach.scp == nil {
+				logger.Error().Msg("site client pool is not configured")
+				return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, "Failed to retrieve client for Site", nil)
+			}
+
+			count, serr := updatedac.ComputeAllocationCount()
+			if serr != nil {
+				logger.Error().Err(serr).Msg("invalid ComputeAllocation constraint count")
+				return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, "Invalid ComputeAllocation constraint count", nil)
+			}
+
+			// Build the site update request while the transaction still owns quota locks.
+			metadata := &cwssaws.Metadata{
+				Name:        a.Name,
+				Description: "",
+			}
+			if a.Description != nil {
+				metadata.Description = *a.Description
+			}
+
+			updateComputeAllocationRequest := &cwssaws.UpdateComputeAllocationRequest{
+				Id:                   &cwssaws.ComputeAllocationId{Value: a.ID.String()},
+				TenantOrganizationId: a.Tenant.Org,
+				Metadata:             metadata,
+				Attributes: &cwssaws.ComputeAllocationAttributes{
+					InstanceTypeId: ac.ResourceTypeID.String(),
+					Count:          count,
+				},
+				UpdatedBy: cdb.GetStrPtr(dbUser.ID.String()),
+			}
+
+			stc, serr := uach.scp.GetClientByID(a.SiteID)
+			if serr != nil {
+				logger.Error().Err(serr).Msg("failed to retrieve Temporal client for Site")
+				return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, "Failed to retrieve client for Site", nil)
+			}
+
+			err = runSynchronousSiteWorkflow(
+				ctx,
+				c,
+				logger,
+				stc,
+				"Allocation",
+				"UpdateComputeAllocation",
+				"compute-allocation-update-"+a.ID.String(),
+				updateComputeAllocationRequest,
+				true,
+				false,
+			)
+			if err != nil {
+				return err
+			}
 		}
 
 		err = tx.Commit()

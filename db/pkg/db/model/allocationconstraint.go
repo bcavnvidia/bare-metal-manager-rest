@@ -22,6 +22,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -93,6 +95,24 @@ type AllocationConstraint struct {
 // GetIndentedJSON returns formatted json of AllocationConstraint
 func (ac *AllocationConstraint) GetIndentedJSON() ([]byte, error) {
 	return json.MarshalIndent(ac, "", "  ")
+}
+
+// ComputeAllocationCount returns ConstraintValue as a valid site ComputeAllocation count.
+func (ac *AllocationConstraint) ComputeAllocationCount() (uint32, error) {
+	if ac == nil {
+		return 0, errors.New("Allocation Constraint is nil")
+	}
+	if ac.ResourceType != AllocationResourceTypeInstanceType {
+		return 0, fmt.Errorf("Allocation Constraint %s is not an InstanceType constraint", ac.ID)
+	}
+	if ac.ConstraintValue < 1 {
+		return 0, fmt.Errorf("Allocation Constraint %s has invalid ComputeAllocation count %d", ac.ID, ac.ConstraintValue)
+	}
+	if ac.ConstraintValue > math.MaxUint32 {
+		return 0, fmt.Errorf("Allocation Constraint %s ComputeAllocation count %d exceeds uint32 max", ac.ID, ac.ConstraintValue)
+	}
+
+	return uint32(ac.ConstraintValue), nil
 }
 
 var _ bun.BeforeAppendModelHook = (*AllocationConstraint)(nil)

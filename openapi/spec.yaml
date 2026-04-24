@@ -12838,6 +12838,7 @@ components:
             - Preemptible
         constraintValue:
           type: integer
+          minimum: 1
           description: Value of the Allocation Constraint. For InstanceType, this value represents number of Machines allocated for Tenant. For IPBlock, this value represents the prefix Length of the IP Block.
         derivedResourceId:
           type:
@@ -12891,6 +12892,7 @@ components:
             - Preemptible
         constraintValue:
           type: integer
+          minimum: 1
           description: Value of the Allocation Constraint. For InstanceType, this value represents number of Machines allocated for Tenant. For IPBlock, this value represents the prefix Length of the IP Block.
       required:
         - resourceType
@@ -12906,6 +12908,7 @@ components:
       properties:
         constraintValue:
           type: integer
+          minimum: 1
           description: Value of the Allocation Constraint. For InstanceType, this value represents number of Machines allocated for Tenant. For IPBlock, this value represents the prefix Length of the IP Block.
       required:
         - constraintValue

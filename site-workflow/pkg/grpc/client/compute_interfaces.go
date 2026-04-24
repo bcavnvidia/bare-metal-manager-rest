@@ -26,6 +26,8 @@ type ComputeGetter interface {
 
 // ComputeInterface for machine gRPC apis
 type ComputeInterface interface {
+	// ComputeAllocation Interface
+	ComputeAllocationInterface
 	MachineInterface
 	// Instance Interface
 	InstanceInterface

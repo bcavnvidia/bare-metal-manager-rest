@@ -573,18 +573,18 @@ func NewAPIRoutes(dbSession *cdb.Session, tc tClient.Client, tnc tClient.Namespa
 		{
 			Path:    apiPathPrefix + "/allocation/:id",
 			Method:  http.MethodPatch,
-			Handler: apiHandler.NewUpdateAllocationHandler(dbSession, tc, cfg),
+			Handler: apiHandler.NewUpdateAllocationHandler(dbSession, tc, scp, cfg),
 		},
 		// AllocationConstraint update endpoint
 		{
 			Path:    apiPathPrefix + "/allocation/:allocationId/constraint/:id",
 			Method:  http.MethodPatch,
-			Handler: apiHandler.NewUpdateAllocationConstraintHandler(dbSession, tc, cfg),
+			Handler: apiHandler.NewUpdateAllocationConstraintHandler(dbSession, tc, scp, cfg),
 		},
 		{
 			Path:    apiPathPrefix + "/allocation/:id",
 			Method:  http.MethodDelete,
-			Handler: apiHandler.NewDeleteAllocationHandler(dbSession, tc, cfg),
+			Handler: apiHandler.NewDeleteAllocationHandler(dbSession, tc, scp, cfg),
 		},
 		// Subnet endpoints
 		{

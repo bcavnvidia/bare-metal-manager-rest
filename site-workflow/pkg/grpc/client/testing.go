@@ -539,6 +539,68 @@ func (c *MockForgeClient) FindTenantsByOrganizationIds(ctx context.Context, in *
 	return out, nil
 }
 
+/* ComputeAllocation mock methods */
+func (c *MockForgeClient) CreateComputeAllocation(ctx context.Context, in *wflows.CreateComputeAllocationRequest, opts ...grpc.CallOption) (*wflows.CreateComputeAllocationResponse, error) {
+	out := &wflows.CreateComputeAllocationResponse{
+		Allocation: &wflows.ComputeAllocation{
+			Id:                   in.GetId(),
+			TenantOrganizationId: in.GetTenantOrganizationId(),
+			Attributes:           in.GetAttributes(),
+			Metadata:             in.GetMetadata(),
+		},
+	}
+	return out, nil
+}
+
+func (c *MockForgeClient) UpdateComputeAllocation(ctx context.Context, in *wflows.UpdateComputeAllocationRequest, opts ...grpc.CallOption) (*wflows.UpdateComputeAllocationResponse, error) {
+	out := &wflows.UpdateComputeAllocationResponse{
+		Allocation: &wflows.ComputeAllocation{
+			Id:                   in.GetId(),
+			TenantOrganizationId: in.GetTenantOrganizationId(),
+			Attributes:           in.GetAttributes(),
+			Metadata:             in.GetMetadata(),
+		},
+	}
+	return out, nil
+}
+
+func (c *MockForgeClient) DeleteComputeAllocation(ctx context.Context, in *wflows.DeleteComputeAllocationRequest, opts ...grpc.CallOption) (*wflows.DeleteComputeAllocationResponse, error) {
+	return &wflows.DeleteComputeAllocationResponse{}, nil
+}
+
+func (c *MockForgeClient) FindComputeAllocationIds(ctx context.Context, in *wflows.FindComputeAllocationIdsRequest, opts ...grpc.CallOption) (*wflows.FindComputeAllocationIdsResponse, error) {
+	if err, ok := ctx.Value("wantError").(error); ok {
+		return nil, status.Error(status.Code(err), "failed to retrieve compute allocation ids")
+	}
+
+	out := &wflows.FindComputeAllocationIdsResponse{}
+	count, ok := ctx.Value("wantCount").(int)
+	if ok {
+		for i := 0; i < count; i++ {
+			out.Ids = append(out.Ids, &wflows.ComputeAllocationId{Value: uuid.NewString()})
+		}
+	}
+
+	return out, nil
+}
+
+func (c *MockForgeClient) FindComputeAllocationsByIds(ctx context.Context, in *wflows.FindComputeAllocationsByIdsRequest, opts ...grpc.CallOption) (*wflows.FindComputeAllocationsByIdsResponse, error) {
+	if err, ok := ctx.Value("wantError").(error); ok {
+		return nil, status.Error(status.Code(err), "failed to retrieve compute allocations")
+	}
+
+	out := &wflows.FindComputeAllocationsByIdsResponse{}
+	if in != nil {
+		for _, id := range in.Ids {
+			out.Allocations = append(out.Allocations, &wflows.ComputeAllocation{
+				Id: id,
+			})
+		}
+	}
+
+	return out, nil
+}
+
 /* Instance Type mock methods */
 func (c *MockForgeClient) CreateInstanceType(ctx context.Context, in *wflows.CreateInstanceTypeRequest, opts ...grpc.CallOption) (*wflows.CreateInstanceTypeResponse, error) {
 	out := &wflows.CreateInstanceTypeResponse{InstanceType: &wflows.InstanceType{}}

@@ -20,6 +20,7 @@ package managers
 import (
 	"github.com/NVIDIA/ncx-infra-controller-rest/site-agent/pkg/components/managers/bootstrap"
 	"github.com/NVIDIA/ncx-infra-controller-rest/site-agent/pkg/components/managers/carbide"
+	"github.com/NVIDIA/ncx-infra-controller-rest/site-agent/pkg/components/managers/computeallocation"
 	"github.com/NVIDIA/ncx-infra-controller-rest/site-agent/pkg/components/managers/dpuextensionservice"
 	"github.com/NVIDIA/ncx-infra-controller-rest/site-agent/pkg/components/managers/expectedmachine"
 	"github.com/NVIDIA/ncx-infra-controller-rest/site-agent/pkg/components/managers/expectedpowershelf"
@@ -116,6 +117,11 @@ func (m *Manager) InfiniBandPartition() *infinibandpartition.API {
 // Tenant - Add Tenant Manager instance here
 func (m *Manager) Tenant() *tenant.API {
 	return tenant.NewTenantManager(m.Data.EB, m.API, m.Conf)
+}
+
+// ComputeAllocation - Add ComputeAllocation Manager instance here
+func (m *Manager) ComputeAllocation() *computeallocation.API {
+	return computeallocation.NewComputeAllocationManager(m.Data.EB, m.API, m.Conf)
 }
 
 // OperatingSystem - Add OperatingSystem Manager instance here

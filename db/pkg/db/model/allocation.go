@@ -133,6 +133,7 @@ type Allocation struct {
 }
 
 type AllocationCreateInput struct {
+	ID                       *uuid.UUID
 	Name                     string
 	Description              *string
 	InfrastructureProviderID uuid.UUID
@@ -232,8 +233,13 @@ func (asd AllocationSQLDAO) Create(ctx context.Context, tx *db.Tx, input Allocat
 		asd.tracerSpan.SetAttribute(aDAOSpan, "name", input.Name)
 	}
 
+	allocationID := uuid.New()
+	if input.ID != nil {
+		allocationID = *input.ID
+	}
+
 	a := &Allocation{
-		ID:                       uuid.New(),
+		ID:                       allocationID,
 		Name:                     input.Name,
 		Description:              input.Description,
 		InfrastructureProviderID: input.InfrastructureProviderID,

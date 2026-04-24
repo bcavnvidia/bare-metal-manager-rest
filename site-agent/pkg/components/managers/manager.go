@@ -30,6 +30,7 @@ import (
 
 	"github.com/NVIDIA/ncx-infra-controller-rest/site-agent/pkg/components/managers/bootstrap"
 	"github.com/NVIDIA/ncx-infra-controller-rest/site-agent/pkg/components/managers/carbide"
+	"github.com/NVIDIA/ncx-infra-controller-rest/site-agent/pkg/components/managers/computeallocation"
 	"github.com/NVIDIA/ncx-infra-controller-rest/site-agent/pkg/components/managers/dpuextensionservice"
 	"github.com/NVIDIA/ncx-infra-controller-rest/site-agent/pkg/components/managers/expectedmachine"
 	"github.com/NVIDIA/ncx-infra-controller-rest/site-agent/pkg/components/managers/expectedpowershelf"
@@ -73,6 +74,7 @@ func NewAPIHandlers() {
 		SSHKeyGroup:            &sshkeygroup.API{},
 		InfiniBandPartition:    &infinibandpartition.API{},
 		Tenant:                 &tenant.API{},
+		ComputeAllocation:      &computeallocation.API{},
 		OperatingSystem:        &operatingsystem.API{},
 		MachineValidation:      &machinevalidation.API{},
 		InstanceType:           &instancetype.API{},
@@ -118,6 +120,7 @@ func (Managers *Manager) NewInstance() {
 	Managers.SSHKeyGroup()
 	Managers.InfiniBandPartition()
 	Managers.Tenant()
+	Managers.ComputeAllocation()
 	Managers.OperatingSystem()
 	Managers.MachineValidation()
 	Managers.InstanceType()
@@ -166,6 +169,7 @@ func (Managers *Manager) Init() {
 	Managers.SSHKeyGroup().Init()
 	Managers.InfiniBandPartition().Init()
 	Managers.Tenant().Init()
+	Managers.ComputeAllocation().Init()
 	Managers.OperatingSystem().Init()
 	Managers.MachineValidation().Init()
 	Managers.InstanceType().Init()

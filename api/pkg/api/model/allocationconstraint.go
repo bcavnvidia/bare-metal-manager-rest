@@ -31,6 +31,8 @@ const (
 	ValidationErrorAllocationConstraintResourceType = "Resource Type must be InstanceType or IPBlock"
 	// ValidationErrorAllocationConstraintConstraintType indicates an invalid ConstraintType field
 	ValidationErrorAllocationConstraintConstraintType = "Constraint Type should be Reserved, OnDemand or Preemptible"
+	// ValidationErrorAllocationConstraintValueMin indicates an invalid ConstraintValue field
+	ValidationErrorAllocationConstraintValueMin = "Constraint Value must be greater than or equal to 1"
 )
 
 // APIAllocationConstraintCreateRequest captures user request to create a new Allocation Constraint
@@ -65,11 +67,10 @@ func (accr APIAllocationConstraintCreateRequest) Validate() error {
 				cdbm.AllocationConstraintTypeReserved,
 			).Error(ValidationErrorAllocationConstraintConstraintType)),
 		validation.Field(&accr.ConstraintValue,
-			validation.Required.Error(validationErrorValueRequired)),
+			validation.Required.Error(validationErrorValueRequired),
+			validation.Min(1).Error(ValidationErrorAllocationConstraintValueMin)),
 	)
 
-	// TODO: Validate the range of values for ConstraintValue
-	// Depending on the constraint type - if there is such a validation required
 	return err
 }
 
@@ -83,7 +84,8 @@ type APIAllocationConstraintUpdateRequest struct {
 func (accr APIAllocationConstraintUpdateRequest) Validate() error {
 	err := validation.ValidateStruct(&accr,
 		validation.Field(&accr.ConstraintValue,
-			validation.Required.Error(validationErrorValueRequired)),
+			validation.Required.Error(validationErrorValueRequired),
+			validation.Min(1).Error(ValidationErrorAllocationConstraintValueMin)),
 	)
 	return err
 }

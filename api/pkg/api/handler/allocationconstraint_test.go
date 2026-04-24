@@ -28,10 +28,12 @@ import (
 
 	"github.com/NVIDIA/ncx-infra-controller-rest/api/pkg/api/handler/util/common"
 	"github.com/NVIDIA/ncx-infra-controller-rest/api/pkg/api/model"
+	sc "github.com/NVIDIA/ncx-infra-controller-rest/api/pkg/client/site"
 	"github.com/NVIDIA/ncx-infra-controller-rest/common/pkg/otelecho"
 	cdb "github.com/NVIDIA/ncx-infra-controller-rest/db/pkg/db"
 	"github.com/NVIDIA/ncx-infra-controller-rest/db/pkg/db/ipam"
 	cdbm "github.com/NVIDIA/ncx-infra-controller-rest/db/pkg/db/model"
+	cwssaws "github.com/NVIDIA/ncx-infra-controller-rest/workflow-schema/schema/site-agent/workflows/v1"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -195,6 +197,12 @@ func TestAllocationConstraintHandler_Update(t *testing.T) {
 	okBodyIT4, err := json.Marshal(model.APIAllocationConstraintUpdateRequest{ConstraintValue: 22})
 	assert.Nil(t, err)
 
+	errBodyZeroConstraint, err := json.Marshal(model.APIAllocationConstraintUpdateRequest{ConstraintValue: 0})
+	assert.Nil(t, err)
+
+	errBodyNegativeConstraint, err := json.Marshal(model.APIAllocationConstraintUpdateRequest{ConstraintValue: -1})
+	assert.Nil(t, err)
+
 	okBodyIP2, err := json.Marshal(model.APIAllocationConstraintUpdateRequest{ConstraintValue: 26})
 	assert.Nil(t, err)
 
@@ -239,6 +247,23 @@ func TestAllocationConstraintHandler_Update(t *testing.T) {
 
 	// OTEL Spanner configuration
 	tracer, _, ctx := common.TestCommonTraceProviderSetup(t, ctx)
+
+	// Mock Temporal Site Client pool
+	tsc := &tmocks.Client{}
+	tcfg, _ := cfg.GetTemporalConfig()
+	scp := sc.NewClientPool(tcfg)
+	scp.IDClientMap[site.ID.String()] = tsc
+
+	wrunSite := &tmocks.WorkflowRun{}
+	wrunSite.On("GetID").Return("test-site-workflow-id")
+	wrunSite.Mock.On("Get", mock.Anything, mock.Anything).Return(nil)
+	tsc.Mock.On("ExecuteWorkflow", mock.Anything, mock.AnythingOfType("internal.StartWorkflowOptions"),
+		"UpdateComputeAllocation", mock.MatchedBy(func(request *cwssaws.UpdateComputeAllocationRequest) bool {
+			return request.GetTenantOrganizationId() == tenant1.Org &&
+				request.GetId().GetValue() != "" &&
+				request.GetAttributes().GetInstanceTypeId() != "" &&
+				request.GetAttributes().GetCount() > 0
+		})).Return(wrunSite, nil)
 
 	// Mock Temporal call
 	tmc1 := &tmocks.Client{}
@@ -378,6 +403,28 @@ func TestAllocationConstraintHandler_Update(t *testing.T) {
 			expectedErr:        true,
 			expectedStatus:     http.StatusBadRequest,
 			expectedErrMessage: "Allocation Constraint does not belong to Allocation specified in request",
+		},
+		{
+			name:           "error when constraint value is zero",
+			reqOrgName:     ipOrg1,
+			reqBody:        string(errBodyZeroConstraint),
+			user:           ipu,
+			requestedAID:   acsit1[0].AllocationID,
+			requestedACS:   acsit1[0],
+			acID:           acsit1[0].ID.String(),
+			expectedErr:    true,
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "error when constraint value is negative",
+			reqOrgName:     ipOrg1,
+			reqBody:        string(errBodyNegativeConstraint),
+			user:           ipu,
+			requestedAID:   acsit1[0].AllocationID,
+			requestedACS:   acsit1[0],
+			acID:           acsit1[0].ID.String(),
+			expectedErr:    true,
+			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:                    "successfully update InstaceType allocation constraint value",
@@ -529,6 +576,7 @@ func TestAllocationConstraintHandler_Update(t *testing.T) {
 			tah := UpdateAllocationConstraintHandler{
 				dbSession: dbSession,
 				tc:        tc.tmc,
+				scp:       scp,
 				cfg:       cfg,
 			}
 
@@ -564,6 +612,17 @@ func TestAllocationConstraintHandler_Update(t *testing.T) {
 			if tc.verifyChildSpanner {
 				span := oteltrace.SpanFromContext(ec.Request().Context())
 				assert.True(t, span.SpanContext().IsValid())
+				tsc.AssertCalled(t, "ExecuteWorkflow",
+					mock.Anything,
+					mock.AnythingOfType("internal.StartWorkflowOptions"),
+					"UpdateComputeAllocation",
+					mock.MatchedBy(func(request *cwssaws.UpdateComputeAllocationRequest) bool {
+						return request.GetId().GetValue() == tc.requestedAID.String() &&
+							request.GetTenantOrganizationId() == tenant1.Org &&
+							request.GetAttributes().GetInstanceTypeId() == tc.requestedACS.ResourceTypeID.String() &&
+							request.GetAttributes().GetCount() == uint32(tc.expectedConstraintValue)
+					}),
+				)
 			}
 		})
 	}

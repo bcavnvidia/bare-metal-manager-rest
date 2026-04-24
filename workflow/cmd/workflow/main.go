@@ -89,6 +89,9 @@ import (
 	tenantActivity "github.com/NVIDIA/ncx-infra-controller-rest/workflow/pkg/activity/tenant"
 	tenantWorkflow "github.com/NVIDIA/ncx-infra-controller-rest/workflow/pkg/workflow/tenant"
 
+	computeAllocationActivity "github.com/NVIDIA/ncx-infra-controller-rest/workflow/pkg/activity/computeallocation"
+	computeAllocationWorkflow "github.com/NVIDIA/ncx-infra-controller-rest/workflow/pkg/workflow/computeallocation"
+
 	instanceTypeActivity "github.com/NVIDIA/ncx-infra-controller-rest/workflow/pkg/activity/instancetype"
 	instanceTypeWorkflow "github.com/NVIDIA/ncx-infra-controller-rest/workflow/pkg/workflow/instancetype"
 
@@ -308,6 +311,9 @@ func main() {
 		// Tenant workflow
 		w.RegisterWorkflow(tenantWorkflow.UpdateTenantInventory)
 
+		// ComputeAllocation workflow
+		w.RegisterWorkflow(computeAllocationWorkflow.UpdateComputeAllocationInventory)
+
 		// InstanceType workflow
 		w.RegisterWorkflow(instanceTypeWorkflow.UpdateInstanceTypeInventory)
 
@@ -367,6 +373,9 @@ func main() {
 
 	tenantManager := tenantActivity.NewManageTenant(dbSession, siteClientPool)
 	w.RegisterActivity(&tenantManager)
+
+	computeAllocationManager := computeAllocationActivity.NewManageComputeAllocation(dbSession, siteClientPool)
+	w.RegisterActivity(&computeAllocationManager)
 
 	instanceTypeManager := instanceTypeActivity.NewManageInstanceType(dbSession, siteClientPool)
 	w.RegisterActivity(&instanceTypeManager)

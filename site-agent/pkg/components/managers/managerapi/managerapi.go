@@ -53,6 +53,7 @@ type ManagerAPI struct {
 	SSHKeyGroup            SSHKeyGroupInterface
 	InfiniBandPartition    InfiniBandPartitionInterface
 	Tenant                 TenantInterface
+	ComputeAllocation      ComputeAllocationInterface
 	OperatingSystem        OperatingSystemInterface
 	MachineValidation      MachineValidationInterface
 	InstanceType           InstanceTypeInterface

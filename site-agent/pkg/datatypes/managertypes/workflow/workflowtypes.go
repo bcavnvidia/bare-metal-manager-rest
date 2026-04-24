@@ -69,6 +69,7 @@ type Workflow struct {
 	InstanceState               *MgrState
 	MachineState                *MgrState
 	TenantState                 *MgrState
+	ComputeAllocationState      *MgrState
 	SSHKeyGroupState            *MgrState
 	InfiniBandPartitionState    *MgrState
 	OperatingSystemState        *MgrState
@@ -102,6 +103,7 @@ func NewWorkflowInstance() *Workflow {
 		SSHKeyGroupState:            &MgrState{},
 		MachineState:                &MgrState{},
 		TenantState:                 &MgrState{},
+		ComputeAllocationState:      &MgrState{},
 		InfiniBandPartitionState:    &MgrState{},
 		OperatingSystemState:        &MgrState{},
 		MachineValidationState:      &MgrState{},

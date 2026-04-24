@@ -18,6 +18,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -27,12 +28,14 @@ import (
 	"strconv"
 
 	temporalClient "go.temporal.io/sdk/client"
+	tp "go.temporal.io/sdk/temporal"
 
 	mapset "github.com/deckarep/golang-set/v2"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/google/uuid"
 
 	"github.com/labstack/echo/v4"
+	"github.com/rs/zerolog"
 
 	"go.opentelemetry.io/otel/attribute"
 
@@ -48,10 +51,75 @@ import (
 	"github.com/NVIDIA/ncx-infra-controller-rest/api/pkg/api/pagination"
 	sc "github.com/NVIDIA/ncx-infra-controller-rest/api/pkg/client/site"
 	auth "github.com/NVIDIA/ncx-infra-controller-rest/auth/pkg/authorization"
+	swe "github.com/NVIDIA/ncx-infra-controller-rest/site-workflow/pkg/error"
 	cwssaws "github.com/NVIDIA/ncx-infra-controller-rest/workflow-schema/schema/site-agent/workflows/v1"
 
 	"github.com/NVIDIA/ncx-infra-controller-rest/db/pkg/db/ipam"
 )
+
+// runSynchronousSiteWorkflow starts a site workflow and waits for completion before returning.
+func runSynchronousSiteWorkflow(
+	ctx context.Context,
+	c echo.Context,
+	logger zerolog.Logger,
+	stc temporalClient.Client,
+	objectName string,
+	workflowName string,
+	workflowID string,
+	request interface{},
+	ignoreNotFound bool,
+	ignoreAlreadyExists bool,
+) error {
+	workflowOptions := temporalClient.StartWorkflowOptions{
+		ID:                       workflowID,
+		TaskQueue:                queue.SiteTaskQueue,
+		WorkflowExecutionTimeout: cutil.WorkflowExecutionTimeout,
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, cutil.WorkflowContextTimeout)
+	defer cancel()
+
+	we, err := stc.ExecuteWorkflow(ctx, workflowOptions, workflowName, request)
+	if err != nil {
+		logger.Error().Err(err).Str("Workflow", workflowName).Msg("failed to synchronously start Temporal workflow")
+		return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, fmt.Sprintf("Failed to start sync workflow %s on Site: %s", workflowName, err), nil)
+	}
+
+	wid := we.GetID()
+	logger.Info().Str("Workflow ID", wid).Str("Workflow", workflowName).Msg("executed synchronous site workflow")
+
+	err = we.Get(ctx, nil)
+	if err != nil {
+		var applicationErr *tp.ApplicationError
+		if errors.As(err, &applicationErr) {
+			switch {
+			case ignoreNotFound && applicationErr.Type() == swe.ErrTypeCarbideObjectNotFound:
+				logger.Warn().Str("Workflow", workflowName).Msg(swe.ErrTypeCarbideObjectNotFound + " received from Site")
+				err = nil
+			case ignoreAlreadyExists && applicationErr.Type() == swe.ErrTypeCarbideAlreadyExists:
+				logger.Warn().Str("Workflow", workflowName).Msg(swe.ErrTypeCarbideAlreadyExists + " received from Site")
+				err = nil
+			case applicationErr.Type() == swe.ErrTypeCarbideUnimplemented || applicationErr.Type() == swe.ErrTypeCarbideDenied:
+				logger.Warn().Str("Workflow", workflowName).Msg("Carbide endpoint unimplemented or restricted response received from Site")
+				err = nil
+			}
+		}
+	}
+
+	if err != nil {
+		var timeoutErr *tp.TimeoutError
+		if errors.As(err, &timeoutErr) || err == context.DeadlineExceeded || ctx.Err() != nil {
+			return common.TerminateWorkflowOnTimeOut(c, logger, stc, wid, err, objectName, workflowName)
+		}
+
+		code, unwrapErr := common.UnwrapWorkflowError(err)
+		logger.Error().Err(unwrapErr).Str("Workflow", workflowName).Msg("failed to synchronously execute Temporal workflow")
+		return cutil.NewAPIErrorResponse(c, code, fmt.Sprintf("Failed to execute sync workflow %s on Site: %s", workflowName, unwrapErr), nil)
+	}
+
+	logger.Info().Str("Workflow ID", wid).Str("Workflow", workflowName).Msg("completed synchronous site workflow")
+	return nil
+}
 
 // ~~~~~ Create Handler ~~~~~ //
 
@@ -394,6 +462,22 @@ func (cah CreateAllocationHandler) Handle(c echo.Context) error {
 		}
 	}
 
+	var computeConstraint *cdbm.AllocationConstraint
+	for i := range dbacsRet {
+		if dbacsRet[i].ResourceType == cdbm.AllocationResourceTypeInstanceType {
+			computeConstraint = &dbacsRet[i]
+			break
+		}
+	}
+	var stc temporalClient.Client
+	if computeConstraint != nil {
+		stc, err = cah.scp.GetClientByID(site.ID)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to retrieve Temporal client for Site")
+			return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, "Failed to retrieve client for Site", nil)
+		}
+	}
+
 	// Create TenantSite entry
 	tsDAO := cdbm.NewTenantSiteDAO(cah.dbSession)
 	_, count, err := tsDAO.GetAll(
@@ -426,37 +510,111 @@ func (cah CreateAllocationHandler) Handle(c echo.Context) error {
 			return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, "Failed to create Allocation, DB error creating Tenant/Site association.", nil)
 		}
 
-		// Get the temporal client for the site we are working with.
-		stc, err := cah.scp.GetClientByID(site.ID)
-		if err != nil {
-			logger.Error().Err(err).Msg("failed to retrieve Temporal client for Site")
-			return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, "Failed to retrieve client for Site", nil)
+		if computeConstraint != nil {
+			// Unlikely case, but ensure that Tenant has an org display name populated
+			orgDisplayName := tenant.Org
+			if tenant.OrgDisplayName != nil {
+				orgDisplayName = *tenant.OrgDisplayName
+			}
+
+			createTenantRequest := &cwssaws.CreateTenantRequest{
+				OrganizationId: tenant.Org,
+				Metadata: &cwssaws.Metadata{
+					Name: orgDisplayName,
+				},
+			}
+
+			err = runSynchronousSiteWorkflow(
+				ctx,
+				c,
+				logger,
+				stc,
+				"Tenant",
+				"CreateTenant",
+				"site-tenant-create-"+tenant.Org,
+				createTenantRequest,
+				false,
+				true,
+			)
+			if err != nil {
+				return err
+			}
+		} else if cah.scp != nil {
+			siteClient, serr := cah.scp.GetClientByID(site.ID)
+			if serr != nil {
+				logger.Error().Err(serr).Msg("failed to retrieve Temporal client for Site")
+				return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, "Failed to retrieve client for Site", nil)
+			}
+
+			createTenantRequest := &cwssaws.CreateTenantRequest{
+				OrganizationId: tenant.Org,
+				Metadata: &cwssaws.Metadata{
+					Name: tenant.Org,
+				},
+			}
+			if tenant.OrgDisplayName != nil {
+				createTenantRequest.Metadata.Name = *tenant.OrgDisplayName
+			}
+
+			err = runSynchronousSiteWorkflow(
+				ctx,
+				c,
+				logger,
+				siteClient,
+				"Tenant",
+				"CreateTenant",
+				"site-tenant-create-"+tenant.Org,
+				createTenantRequest,
+				false,
+				true,
+			)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if computeConstraint != nil {
+		metadata := &cwssaws.Metadata{
+			Name:        a.Name,
+			Description: "",
+		}
+		if a.Description != nil {
+			metadata.Description = *a.Description
 		}
 
-		// Trigger creation of Tenant on Site
-		workflowOptions := temporalClient.StartWorkflowOptions{
-			ID:        "site-tenant-create-" + tenant.Org,
-			TaskQueue: queue.SiteTaskQueue,
+		count, serr := computeConstraint.ComputeAllocationCount()
+		if serr != nil {
+			logger.Error().Err(serr).Msg("invalid ComputeAllocation constraint count")
+			return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, "Invalid ComputeAllocation constraint count", nil)
 		}
 
-		// Trigger apporpriate workflow on Site
-		// Unlikely case, but ensure that Tenant has an org display name populated
-		orgDisplayName := tenant.Org
-		if tenant.OrgDisplayName != nil {
-			orgDisplayName = *tenant.OrgDisplayName
-		}
-		createTenantRequest := &cwssaws.CreateTenantRequest{
-			OrganizationId: tenant.Org,
-			Metadata: &cwssaws.Metadata{
-				Name: orgDisplayName,
+		// Build the site-native ComputeAllocation request from the Allocation row and constraint.
+		createComputeAllocationRequest := &cwssaws.CreateComputeAllocationRequest{
+			Id:                   &cwssaws.ComputeAllocationId{Value: a.ID.String()},
+			Metadata:             metadata,
+			TenantOrganizationId: tenant.Org,
+			Attributes: &cwssaws.ComputeAllocationAttributes{
+				InstanceTypeId: computeConstraint.ResourceTypeID.String(),
+				Count:          count,
 			},
+			CreatedBy: cdb.GetStrPtr(dbUser.ID.String()),
 		}
 
-		we, err := stc.ExecuteWorkflow(ctx, workflowOptions, "CreateTenant", createTenantRequest)
+		err = runSynchronousSiteWorkflow(
+			ctx,
+			c,
+			logger,
+			stc,
+			"Allocation",
+			"CreateComputeAllocation",
+			"compute-allocation-create-"+a.ID.String(),
+			createComputeAllocationRequest,
+			false,
+			false,
+		)
 		if err != nil {
-			logger.Error().Err(err).Str("Tenant ID", tenant.ID.String()).Msg("failed to trigger workflow to create Tenant")
-		} else {
-			logger.Info().Str("Workflow ID", we.GetID()).Msg("triggered workflow to create Tenant")
+			return err
 		}
 	}
 
@@ -925,15 +1083,17 @@ func (gah GetAllocationHandler) Handle(c echo.Context) error {
 type UpdateAllocationHandler struct {
 	dbSession  *cdb.Session
 	tc         temporalClient.Client
+	scp        *sc.ClientPool
 	cfg        *config.Config
 	tracerSpan *cutil.TracerSpan
 }
 
 // NewUpdateAllocationHandler initializes and returns a new handler for updating Allocation
-func NewUpdateAllocationHandler(dbSession *cdb.Session, tc temporalClient.Client, cfg *config.Config) UpdateAllocationHandler {
+func NewUpdateAllocationHandler(dbSession *cdb.Session, tc temporalClient.Client, scp *sc.ClientPool, cfg *config.Config) UpdateAllocationHandler {
 	return UpdateAllocationHandler{
 		dbSession:  dbSession,
 		tc:         tc,
+		scp:        scp,
 		cfg:        cfg,
 		tracerSpan: cutil.NewTracerSpan(),
 	}
@@ -1057,6 +1217,9 @@ func (uah UpdateAllocationHandler) Handle(c echo.Context) error {
 		}
 	}
 
+	// Preserve relation-backed values before Update reloads the Allocation without relations.
+	tenantOrg := a.Tenant.Org
+
 	a, err = aDAO.Update(ctx, tx, cdbm.AllocationUpdateInput{AllocationID: aID, Name: apiRequest.Name, Description: apiRequest.Description})
 	if err != nil {
 		logger.Error().Err(err).Msg("error updating Allocation in DB")
@@ -1106,6 +1269,63 @@ func (uah UpdateAllocationHandler) Handle(c echo.Context) error {
 		return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, "Failed to retrieve Allocation Constraints for Allocation", nil)
 	}
 
+	var computeConstraint *cdbm.AllocationConstraint
+	for i := range acs {
+		if acs[i].ResourceType == cdbm.AllocationResourceTypeInstanceType {
+			computeConstraint = &acs[i]
+			break
+		}
+	}
+	if computeConstraint != nil {
+		stc, serr := uah.scp.GetClientByID(a.SiteID)
+		if serr != nil {
+			logger.Error().Err(serr).Msg("failed to retrieve Temporal client for Site")
+			return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, "Failed to retrieve client for Site", nil)
+		}
+
+		metadata := &cwssaws.Metadata{
+			Name:        a.Name,
+			Description: "",
+		}
+		if a.Description != nil {
+			metadata.Description = *a.Description
+		}
+
+		count, serr := computeConstraint.ComputeAllocationCount()
+		if serr != nil {
+			logger.Error().Err(serr).Msg("invalid ComputeAllocation constraint count")
+			return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, "Invalid ComputeAllocation constraint count", nil)
+		}
+
+		// Build the site-native ComputeAllocation request from the updated Allocation metadata.
+		updateComputeAllocationRequest := &cwssaws.UpdateComputeAllocationRequest{
+			Id:                   &cwssaws.ComputeAllocationId{Value: a.ID.String()},
+			TenantOrganizationId: tenantOrg,
+			Metadata:             metadata,
+			Attributes: &cwssaws.ComputeAllocationAttributes{
+				InstanceTypeId: computeConstraint.ResourceTypeID.String(),
+				Count:          count,
+			},
+			UpdatedBy: cdb.GetStrPtr(dbUser.ID.String()),
+		}
+
+		err = runSynchronousSiteWorkflow(
+			ctx,
+			c,
+			logger,
+			stc,
+			"Allocation",
+			"UpdateComputeAllocation",
+			"compute-allocation-update-"+a.ID.String(),
+			updateComputeAllocationRequest,
+			true,
+			false,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
 	if err = tx.Commit(); err != nil {
 		logger.Error().Err(err).Msg("error updating Allocation in DB")
 		return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, "Failed to update Allocation", nil)
@@ -1130,15 +1350,17 @@ func (uah UpdateAllocationHandler) Handle(c echo.Context) error {
 type DeleteAllocationHandler struct {
 	dbSession  *cdb.Session
 	tc         temporalClient.Client
+	scp        *sc.ClientPool
 	cfg        *config.Config
 	tracerSpan *cutil.TracerSpan
 }
 
 // NewDeleteAllocationHandler initializes and returns a new handler for deleting Allocation
-func NewDeleteAllocationHandler(dbSession *cdb.Session, tc temporalClient.Client, cfg *config.Config) DeleteAllocationHandler {
+func NewDeleteAllocationHandler(dbSession *cdb.Session, tc temporalClient.Client, scp *sc.ClientPool, cfg *config.Config) DeleteAllocationHandler {
 	return DeleteAllocationHandler{
 		dbSession:  dbSession,
 		tc:         tc,
+		scp:        scp,
 		cfg:        cfg,
 		tracerSpan: cutil.NewTracerSpan(),
 	}
@@ -1484,6 +1706,42 @@ func (dah DeleteAllocationHandler) Handle(c echo.Context) error {
 				logger.Error().Err(err).Msg("error deleting Tenant/Site association")
 				return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, "Error deleting Allocation, DB error deleting Tenant/Site association", nil)
 			}
+		}
+	}
+
+	var computeConstraint *cdbm.AllocationConstraint
+	for i := range acs {
+		if acs[i].ResourceType == cdbm.AllocationResourceTypeInstanceType {
+			computeConstraint = &acs[i]
+			break
+		}
+	}
+	if computeConstraint != nil {
+		stc, serr := dah.scp.GetClientByID(a.SiteID)
+		if serr != nil {
+			logger.Error().Err(serr).Msg("failed to retrieve Temporal client for Site")
+			return cutil.NewAPIErrorResponse(c, http.StatusInternalServerError, "Failed to retrieve client for Site", nil)
+		}
+
+		deleteComputeAllocationRequest := &cwssaws.DeleteComputeAllocationRequest{
+			Id:                   &cwssaws.ComputeAllocationId{Value: a.ID.String()},
+			TenantOrganizationId: a.Tenant.Org,
+		}
+
+		err = runSynchronousSiteWorkflow(
+			ctx,
+			c,
+			logger,
+			stc,
+			"Allocation",
+			"DeleteComputeAllocation",
+			"compute-allocation-delete-"+a.ID.String(),
+			deleteComputeAllocationRequest,
+			true,
+			false,
+		)
+		if err != nil {
+			return err
 		}
 	}
 

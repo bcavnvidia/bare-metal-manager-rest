@@ -178,6 +178,65 @@ func testAllocationConstraintBuildIPBlock(t *testing.T, dbSession *db.Session,
 	return ipBlock
 }
 
+func TestAllocationConstraint_ComputeAllocationCount(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     *AllocationConstraint
+		wantCount uint32
+		wantErr   bool
+	}{
+		{
+			name: "returns count for valid instance type constraint",
+			input: &AllocationConstraint{
+				ID:              uuid.New(),
+				ResourceType:    AllocationResourceTypeInstanceType,
+				ConstraintValue: 3,
+			},
+			wantCount: 3,
+		},
+		{
+			name: "errors for zero count",
+			input: &AllocationConstraint{
+				ID:              uuid.New(),
+				ResourceType:    AllocationResourceTypeInstanceType,
+				ConstraintValue: 0,
+			},
+			wantErr: true,
+		},
+		{
+			name: "errors for negative count",
+			input: &AllocationConstraint{
+				ID:              uuid.New(),
+				ResourceType:    AllocationResourceTypeInstanceType,
+				ConstraintValue: -1,
+			},
+			wantErr: true,
+		},
+		{
+			name: "errors for non-instance-type constraint",
+			input: &AllocationConstraint{
+				ID:              uuid.New(),
+				ResourceType:    AllocationResourceTypeIPBlock,
+				ConstraintValue: 24,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "errors for nil constraint",
+			input:   nil,
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			count, err := tc.input.ComputeAllocationCount()
+			assert.Equal(t, tc.wantErr, err != nil)
+			assert.Equal(t, tc.wantCount, count)
+		})
+	}
+}
+
 func TestAllocationConstraintSQLDAO_CreateFromParams(t *testing.T) {
 	ctx := context.Background()
 	dbSession := testAllocationConstraintInitDB(t)

@@ -69,6 +69,16 @@ func TestAPIAllocationConstraintCreateRequest_Validate(t *testing.T) {
 			expectErr: true,
 		},
 		{
+			desc:      "error when constraint value is zero",
+			obj:       APIAllocationConstraintCreateRequest{ResourceType: cdbm.AllocationResourceTypeIPBlock, ResourceTypeID: uuid.New().String(), ConstraintType: cdbm.AllocationConstraintTypeOnDemand, ConstraintValue: 0},
+			expectErr: true,
+		},
+		{
+			desc:      "error when constraint value is negative",
+			obj:       APIAllocationConstraintCreateRequest{ResourceType: cdbm.AllocationResourceTypeIPBlock, ResourceTypeID: uuid.New().String(), ConstraintType: cdbm.AllocationConstraintTypeOnDemand, ConstraintValue: -1},
+			expectErr: true,
+		},
+		{
 			desc:      "ok with valid values",
 			obj:       APIAllocationConstraintCreateRequest{ResourceType: cdbm.AllocationResourceTypeIPBlock, ResourceTypeID: uuid.New().String(), ConstraintType: cdbm.AllocationConstraintTypeOnDemand, ConstraintValue: 5},
 			expectErr: false,
@@ -91,6 +101,16 @@ func TestAPIAllocationConstraintUpdateRequest_Validate(t *testing.T) {
 		{
 			desc:      "error when constraint value is not specified",
 			obj:       APIAllocationConstraintUpdateRequest{},
+			expectErr: true,
+		},
+		{
+			desc:      "error when constraint value is zero",
+			obj:       APIAllocationConstraintUpdateRequest{ConstraintValue: 0},
+			expectErr: true,
+		},
+		{
+			desc:      "error when constraint value is negative",
+			obj:       APIAllocationConstraintUpdateRequest{ConstraintValue: -1},
 			expectErr: true,
 		},
 		{
