@@ -829,6 +829,7 @@ func TestManageVpc_UpdateVpcsInDB(t *testing.T) {
 		ethernetVirtualizationUpdatedVpcs []*cdbm.Vpc
 		routingProfileUpdatedVpcs         []*cdbm.Vpc
 		routingProfileClearedVpcs         []*cdbm.Vpc
+		readyStatusDetailVpcs             []*cdbm.Vpc
 		requiredMetadataUpdate            bool
 		metadataVpcUpdate                 *cdbm.Vpc
 		wantErr                           bool
@@ -923,6 +924,7 @@ func TestManageVpc_UpdateVpcsInDB(t *testing.T) {
 			missingVpcs:                       []*cdbm.Vpc{vpc7, vpc11},
 			restoredVpcs:                      []*cdbm.Vpc{vpc8},
 			unpairedVpcs:                      []*cdbm.Vpc{vpc9, vpc10},
+			readyStatusDetailVpcs:             []*cdbm.Vpc{vpc1},
 			wantErr:                           false,
 		},
 		{
@@ -1140,6 +1142,16 @@ func TestManageVpc_UpdateVpcsInDB(t *testing.T) {
 
 				scReq := tt.fields.clientPoolClient.Calls[0].Arguments[3].(*cwssaws.VpcUpdateRequest)
 				assert.Equal(t, tt.metadataVpcUpdate.ID.String(), scReq.Id.Value)
+			}
+
+			statusDetailDAO := cdbm.NewStatusDetailDAO(dbSession)
+			for _, vpc := range tt.readyStatusDetailVpcs {
+				statusDetails, _, err := statusDetailDAO.GetAllByEntityID(ctx, nil, vpc.ID.String(), nil, cdb.GetIntPtr(1), nil)
+				require.NoError(t, err)
+				require.Len(t, statusDetails, 1)
+				assert.Equal(t, cdbm.VpcStatusReady, statusDetails[0].Status)
+				require.NotNil(t, statusDetails[0].Message)
+				assert.Equal(t, "VPC is ready for use", *statusDetails[0].Message)
 			}
 		})
 	}
